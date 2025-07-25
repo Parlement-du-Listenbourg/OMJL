@@ -1,39 +1,46 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Bienvenue sur la page d'accueil de l'OMJL">
+    <meta name="robots" content="index, follow">
     <title>OMJL - Page d'accueil</title>
-    <link rel="stylesheet" href="styles.css" />
-    <link rel="icon" type="image/png" href="logo.png" />
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/png" href="logo.png">
+
+    <meta property="og:title" content="OMJL - Page d'accueil" />
+    <meta property="og:description" content="Bienvenue sur la page d'accueil de l'OMJL" />
+    <meta property="og:image" content="logo.png" />
+    <meta property="og:url" content="https://parlement-du-listenbourg.github.io/OMJL/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:determiner" content="le" />
+    <meta property="og:locale" content="fr_FR" />
 </head>
 <body>
     <header class="main-header">
-        <img src="logo.png" alt="Logo de l'OMJL" class="logo" />
+        <img src="logo.png" alt="Logo de l'OMJL" class="logo">
         <span class="page-title">Page d'accueil</span>
-
-        <nav class="header-nav">
-            <a href="https://discord.gg/UJDYnnFdcK" class="header-button">Discord Média du Listenbourg</a>
-            <a href="https://discord.gg/rZervsXnWs" class="header-button">Discord OMJL</a>
-        </nav>
-
-        <div class="header-select">
-            <select id="mediaFilter">
-                <option value="all">Tous les médias</option>
-                <option value="imago">Imago Veritatis</option>
-                <option value="rtl">RTL World</option>
-            </select>
-            <select id="categoryFilter">
-                <option value="all">Toutes les catégories</option>
-            </select>
+        <div class="dropdown">
+            <button id="dropdownToggle" class="header-button">+</button>
+            <div id="dropdownMenu" class="dropdown-content">
+                <a href="https://discord.gg/UJDYnnFdcK" class="header-button">Discord Média du Listenbourg</a>
+                <a href="https://discord.gg/rZervsXnWs" class="header-button">Discord OMJL</a>
+                <a href="https://discord.gg/dttgPJzTmK">Discord Groupe RTL</a>
+                <a href="https://discord.gg/VnjaETmxD2">Discord Parlement du Listenbourg</a>
+                <a href="./about">À propos de l'OMJL</a>
+                <hr class="dropdown-separator" />
+                <a id="lastArticleLink" href="#">Dernier article</a>
+                <div class="header-select">
+                <select id="categoryFilter">
+                    <option value="all">Toutes les catégories</option>
+                    </select>
+                </div>
+            </div>
         </div>
     </header>
 
-    <main>
-        <div id="articles-container"></div>
-        <!-- Élément sentinelle pour le scroll infini -->
-        <div id="scroll-sentinel"></div>
-    </main>
+    <div id="articles-container"></div>
 
     <script type="module" src="articles.js"></script>
 </body>

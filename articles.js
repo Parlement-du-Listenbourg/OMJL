@@ -134,6 +134,11 @@ async function loadBatch(source) {
     const preview = safeTruncate(html.replaceAll('</small>', '</small><br>'), 300);
     const timestamp = d.realTimestamp?.toDate() || new Date();
 
+    const date = d.realTimestamp?.seconds
+  ? new Date(d.realTimestamp.seconds * 1000).toLocaleString()
+  : "Date inconnue";
+
+
     allArticles.push({
       id: doc.id,
       title: d.title,
