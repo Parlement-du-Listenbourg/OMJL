@@ -1,6 +1,7 @@
 import { getFirestore, collection, getDocs, query, orderBy, startAfter, limit } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
 import { toHTML } from "https://cdn.jsdelivr.net/npm/@odiffey/discord-markdown@3.3.0/+esm";
+import showdown from "https://cdn.jsdelivr.net/npm/showdown@2.1.0/+esm";
 
 // Configs Firebase
 const configImago = {
