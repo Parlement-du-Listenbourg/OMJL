@@ -1,3 +1,5 @@
+// ✅ OMJL - articles.js combiné RTL World + Imago Veritatis
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
 import { getFirestore, collection, query, orderBy, startAfter, limit, getDocs } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
 import { toHTML } from "https://cdn.jsdelivr.net/npm/@odiffey/discord-markdown@3.3.0/+esm";
@@ -21,7 +23,6 @@ const configImago = {
     appId: "1:000000000000:web:exampleid1"
 };
 
-// Init apps séparées
 const appRTL = initializeApp(configRTL, "rtl");
 const appImago = initializeApp(configImago, "imago");
 const dbs = {
@@ -29,12 +30,11 @@ const dbs = {
     imago: getFirestore(appImago)
 };
 
-// Paramètres
 const pageSize = 8;
 let lastVisibleDocs = { rtl: null, imago: null };
 let hasMore = { rtl: true, imago: true };
 let isLoading = false;
-let currentSource = "all"; // "rtl", "imago" ou "all"
+let currentSource = "all";
 
 const articlesContainer = document.getElementById("articles-container");
 const mediaFilter = document.getElementById("mediaFilter");
@@ -46,26 +46,20 @@ const allArticles = [];
 
 function safeTruncate(html, maxLen) {
   let truncated = html.slice(0, maxLen);
-  truncated = truncated.replace(/&[^\s;]*?$/, '');
+  truncated = truncated.replace(/&[^
+\s;]*?$/, '');
   truncated = truncated.replace(/<[^>]*?$/, '');
-
   const openTags = [...truncated.matchAll(/<([a-z]+)(\s[^>]*)?>/gi)].map(m => m[1]);
   const closeTags = [...truncated.matchAll(/<\/([a-z]+)>/gi)].map(m => m[1]);
-
   const stack = [];
   openTags.forEach(tag => {
     const idxClose = closeTags.indexOf(tag);
-    if (idxClose !== -1) {
-      closeTags.splice(idxClose, 1);
-    } else {
-      stack.push(tag);
-    }
+    if (idxClose !== -1) closeTags.splice(idxClose, 1);
+    else stack.push(tag);
   });
-
   stack.reverse().forEach(tag => {
     truncated += `</${tag}>`;
   });
-
   return truncated;
 }
 
@@ -88,21 +82,20 @@ function displayArticles() {
   if (currentSource !== "all") {
     toDisplay = toDisplay.filter(a => a.source === currentSource);
   }
-  toDisplay
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .forEach(data => {
-      const el = document.createElement("div");
-      el.classList.add("article-card");
-      el.innerHTML = `
-        <a href="article.html?id=${data.id}&media=${data.source}" class="article-link">
-            <h2>${data.title}</h2>
-            <p>Auteur : ${data.author} – Publié le : ${data.dateStr} – Catégorie : ${data.category || "Non spécifiée"} – Source : ${data.source.toUpperCase()}</p>
-            <div>${data.preview}...</div>
-            ${data.meme ? `<img src="${data.meme}" alt="Illustration" class="article-image">` : ''}
-        </a>
-      `;
-      articlesContainer.appendChild(el);
-    });
+  toDisplay.sort((a, b) => b.timestamp - a.timestamp).forEach(data => {
+    const label = data.source === "rtl" ? "RTL World" : "Imago Veritatis";
+    const el = document.createElement("div");
+    el.classList.add("article-card");
+    el.innerHTML = `
+      <a href="article.html?id=${data.id}&media=${data.source}" class="article-link">
+        <h2>${data.title}</h2>
+        <p>Auteur : ${data.author} – Publié le : ${data.dateStr} – Catégorie : ${data.category || "Non spécifiée"} – Source : ${label}</p>
+        <div>${data.preview}...</div>
+        ${data.meme ? `<img src="${data.meme}" alt="Illustration" class="article-image">` : ''}
+      </a>
+    `;
+    articlesContainer.appendChild(el);
+  });
 }
 
 async function loadBatch(source) {
@@ -133,11 +126,11 @@ async function loadBatch(source) {
     const html = toHTML(d.content || "");
     const preview = safeTruncate(html.replaceAll('</small>', '</small><br>'), 300);
 
-    const timestamp = d.realTimestamp?.seconds
+    const timestamp = typeof d.realTimestamp?.toDate === 'function'
+      ? d.realTimestamp.toDate()
+      : d.realTimestamp?.seconds
       ? new Date(d.realTimestamp.seconds * 1000)
       : new Date();
-
-    const dateStr = timestamp.toLocaleDateString();
 
     allArticles.push({
       id: doc.id,
@@ -147,7 +140,7 @@ async function loadBatch(source) {
       meme: d.meme,
       preview,
       timestamp,
-      dateStr,
+      dateStr: timestamp.toLocaleDateString(),
       source
     });
   }
@@ -156,21 +149,19 @@ async function loadBatch(source) {
   isLoading = false;
 }
 
-// Scroll infini
 const observer = new IntersectionObserver(entries => {
   entries.forEach(entry => {
-    if (entry.isIntersecting && currentSource !== "all") {
-      loadBatch(currentSource);
-    } else if (entry.isIntersecting && currentSource === "all") {
+    if (entry.isIntersecting && currentSource === "all") {
       loadBatch("rtl");
       loadBatch("imago");
+    } else if (entry.isIntersecting) {
+      loadBatch(currentSource);
     }
   });
 }, { rootMargin: "200px" });
 
 observer.observe(sentinel);
 
-// Filtre
 if (mediaFilter) {
   mediaFilter.addEventListener("change", () => {
     currentSource = mediaFilter.value;
@@ -178,6 +169,5 @@ if (mediaFilter) {
   });
 }
 
-// Initial load
 loadBatch("rtl");
 loadBatch("imago");
