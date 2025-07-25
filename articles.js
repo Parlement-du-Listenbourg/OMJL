@@ -1,178 +1,133 @@
-// ✅ OMJL - articles.js combiné RTL World + Imago Veritatis
+// articles.js
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
-import { getFirestore, collection, query, orderBy, startAfter, limit, getDocs } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
-import { toHTML } from "https://cdn.jsdelivr.net/npm/@odiffey/discord-markdown@3.3.0/+esm";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  limit,
+  startAfter
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { toHTML } from "https://cdn.jsdelivr.net/npm/@odiffey/discord-markdown@1.4.4/index.min.js";
 
-// Configs Firebase
-const configRTL = {
-    apiKey: "AIzaSyBw7PSHW4fe2jptxyf7xHtyINSrYG_TupA",
-    authDomain: "rtl-world.firebaseapp.com",
-    projectId: "rtl-world",
-    storageBucket: "rtl-world.firebasestorage.app",
-    messagingSenderId: "1092619392407",
-    appId: "1:1092619392407:web:f968b6ef5416d66d6360d2"
-};
+// CONFIGS
+const configs = [
+  {
+    name: "RTL World",
+    source: "rtl-world",
+    firebaseConfig: {
+      apiKey: "AIzaSyBw7PSHW4fe2jptxyf7xHtyINSrYG_TupA",
+      authDomain: "rtl-world.firebaseapp.com",
+      projectId: "rtl-world",
+    },
+  },
+  {
+    name: "Imago Veritatis",
+    source: "imago-veritatis",
+    firebaseConfig: {
+      apiKey: "AIzaSyD-5pyznzIMvmG5-qyRMSr0UXq7nDbJNuU",
+      authDomain: "imago-veritatis.firebaseapp.com",
+      projectId: "imago-veritatis",
+    },
+  },
+];
 
-const configImago = {
-    apiKey: "AIzaSyCaexv-0SVEmPeRNYt-WviKBiUhH-Ju7XQ",
-    authDomain: "imago-veritatis.firebaseapp.com",
-    projectId: "imago-veritatis",
-    storageBucket: "imago-veritatis.appspot.com",
-    messagingSenderId: "000000000000",
-    appId: "1:000000000000:web:exampleid1"
-};
+let allArticles = [];
+let lastVisiblePerSource = {};
+let loading = false;
 
-const appRTL = initializeApp(configRTL, "rtl");
-const appImago = initializeApp(configImago, "imago");
-const dbs = {
-    rtl: getFirestore(appRTL),
-    imago: getFirestore(appImago)
-};
+async function fetchNextBatch() {
+  if (loading) return;
+  loading = true;
 
-const pageSize = 8;
-let lastVisibleDocs = { rtl: null, imago: null };
-let hasMore = { rtl: true, imago: true };
-let isLoading = false;
-let currentSource = "all";
+  for (const config of configs) {
+    const app = initializeApp(config.firebaseConfig, config.source);
+    const db = getFirestore(app);
+    const articlesRef = collection(db, "articles");
 
-const articlesContainer = document.getElementById("articles-container");
-const mediaFilter = document.getElementById("mediaFilter");
-const sentinel = document.createElement("div");
-sentinel.id = "scroll-sentinel";
-articlesContainer.after(sentinel);
+    let q = query(articlesRef, orderBy("realTimestamp", "desc"), limit(6));
 
-const allArticles = [];
+    if (lastVisiblePerSource[config.source]) {
+      q = query(
+        articlesRef,
+        orderBy("realTimestamp", "desc"),
+        startAfter(lastVisiblePerSource[config.source]),
+        limit(6)
+      );
+    }
 
-function safeTruncate(html, maxLen) {
-  let truncated = html.slice(0, maxLen);
-  truncated = truncated.replace(/&[^\s;]*?$/, '');
-  truncated = truncated.replace(/<[^>]*?$/, '');
-  const openTags = [...truncated.matchAll(/<([a-z]+)(\s[^>]*)?>/gi)].map(m => m[1]);
-  const closeTags = [...truncated.matchAll(/<\/([a-z]+)>/gi)].map(m => m[1]);
-  const stack = [];
-  openTags.forEach(tag => {
-    const idxClose = closeTags.indexOf(tag);
-    if (idxClose !== -1) closeTags.splice(idxClose, 1);
-    else stack.push(tag);
-  });
-  stack.reverse().forEach(tag => {
-    truncated += `</${tag}>`;
-  });
-  return truncated;
-}
+    const snap = await getDocs(q);
 
-function showPlaceholders() {
-  for (let i = 0; i < 3; i++) {
-    const p = document.createElement("div");
-    p.className = "article-card placeholder";
-    p.innerHTML = `<h2>Chargement...</h2><div class="shimmer"></div>`;
-    articlesContainer.appendChild(p);
+    if (!snap.empty) {
+      lastVisiblePerSource[config.source] = snap.docs[snap.docs.length - 1];
+
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        d.sourceName = config.name;
+        allArticles.push(d);
+      }
+    }
   }
-}
 
-function removePlaceholders() {
-  document.querySelectorAll(".placeholder").forEach(e => e.remove());
+  // Tri des articles toutes sources confondues par date décroissante
+  allArticles.sort((a, b) => {
+    const dateA = a.realTimestamp?.toDate?.() ?? new Date(a.realTimestamp?.seconds * 1000);
+    const dateB = b.realTimestamp?.toDate?.() ?? new Date(b.realTimestamp?.seconds * 1000);
+    return dateB - dateA;
+  });
+
+  displayArticles();
+  loading = false;
 }
 
 function displayArticles() {
-  articlesContainer.innerHTML = "";
-  let toDisplay = [...allArticles];
-  if (currentSource !== "all") {
-    toDisplay = toDisplay.filter(a => a.source === currentSource);
-  }
-  toDisplay.sort((a, b) => b.timestamp - a.timestamp).forEach(data => {
-    const label = data.source === "rtl" ? "RTL World" : "Imago Veritatis";
-    const el = document.createElement("div");
-    el.classList.add("article-card");
-    el.innerHTML = `
-      <a href="article.html?id=${data.id}&media=${data.source}" class="article-link">
-        <h2>${data.title}</h2>
-        <p>Auteur : ${data.author} – Publié le : ${data.dateStr} – Catégorie : ${data.category || "Non spécifiée"} – Source : ${label}</p>
-        <div>${data.preview}...</div>
-        ${data.meme ? `<img src="${data.meme}" alt="Illustration" class="article-image">` : ''}
-      </a>
+  const container = document.getElementById("articles");
+  container.innerHTML = "";
+
+  for (const article of allArticles) {
+    const html = toHTML(article.content || "");
+    const preview = truncateHTML(html, 300);
+
+    const timestamp = article.realTimestamp?.toDate?.() ?? new Date(article.realTimestamp?.seconds * 1000);
+    const date = timestamp instanceof Date ? timestamp.toLocaleDateString() : "?";
+
+    const card = document.createElement("div");
+    card.className = "article-card";
+    card.innerHTML = `
+      <h3>${article.title || "Sans titre"}</h3>
+      <p class="meta">Auteur : ${article.author || "?"} – Publié le : ${date} – Catégorie : ${article.category || "?"} – Source : ${article.sourceName}</p>
+      <div class="preview">${preview}</div>
     `;
-    articlesContainer.appendChild(el);
-  });
+    container.appendChild(card);
+  }
 }
 
-async function loadBatch(source) {
-  if (isLoading || !hasMore[source]) return;
-  isLoading = true;
-  showPlaceholders();
+function truncateHTML(html, maxLength) {
+  const temp = document.createElement("div");
+  temp.innerHTML = html;
+  let output = "";
+  let total = 0;
 
-  const db = dbs[source];
-  const col = collection(db, "articles");
-  let q = query(col, orderBy("realTimestamp", "desc"), limit(pageSize));
-  if (lastVisibleDocs[source]) {
-    q = query(col, orderBy("realTimestamp", "desc"), startAfter(lastVisibleDocs[source]), limit(pageSize));
-  }
-
-  const snap = await getDocs(q);
-  removePlaceholders();
-
-  if (snap.empty) {
-    hasMore[source] = false;
-    isLoading = false;
-    return;
-  }
-
-  lastVisibleDocs[source] = snap.docs[snap.docs.length - 1];
-
-  for (const doc of snap.docs) {
-    const d = doc.data();
-    const html = toHTML(d.content || "");
-    const preview = safeTruncate(html.replaceAll('</small>', '</small><br>'), 300);
-
-  const timestamp = typeof d.realTimestamp?.toDate === 'function'
-    ? d.realTimestamp.toDate()
-    : d.realTimestamp?.seconds
-    ? new Date(d.realTimestamp.seconds * 1000)
-    : new Date();
-
-  const dateStr = timestamp.toLocaleString("fr-FR", {
-    dateStyle: "long",
-    timeStyle: "short"
-  });
-
-
-    allArticles.push({
-      id: doc.id,
-      title: d.title,
-      author: d.author,
-      category: d.category,
-      meme: d.meme,
-      preview,
-      timestamp,
-      dateStr:
-      source
-    });
-  }
-
-  displayArticles();
-  isLoading = false;
-}
-
-const observer = new IntersectionObserver(entries => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting && currentSource === "all") {
-      loadBatch("rtl");
-      loadBatch("imago");
-    } else if (entry.isIntersecting) {
-      loadBatch(currentSource);
+  for (const node of temp.childNodes) {
+    if (total >= maxLength) break;
+    const text = node.textContent;
+    if (text) {
+      const chunk = text.slice(0, maxLength - total);
+      output += chunk;
+      total += chunk.length;
     }
-  });
-}, { rootMargin: "200px" });
-
-observer.observe(sentinel);
-
-if (mediaFilter) {
-  mediaFilter.addEventListener("change", () => {
-    currentSource = mediaFilter.value;
-    displayArticles();
-  });
+  }
+  return output + (total >= maxLength ? "..." : "");
 }
 
-loadBatch("rtl");
-loadBatch("imago");
+// Scroll infini
+window.addEventListener("scroll", () => {
+  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
+    fetchNextBatch();
+  }
+});
+
+// Chargement initial
+fetchNextBatch();
