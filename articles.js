@@ -46,8 +46,7 @@ const allArticles = [];
 
 function safeTruncate(html, maxLen) {
   let truncated = html.slice(0, maxLen);
-  truncated = truncated.replace(/&[^
-\s;]*?$/, '');
+  truncated = truncated.replace(/&[^\s;]*?$/, '');
   truncated = truncated.replace(/<[^>]*?$/, '');
   const openTags = [...truncated.matchAll(/<([a-z]+)(\s[^>]*)?>/gi)].map(m => m[1]);
   const closeTags = [...truncated.matchAll(/<\/([a-z]+)>/gi)].map(m => m[1]);
