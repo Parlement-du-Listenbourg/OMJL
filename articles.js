@@ -1,8 +1,17 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import showdown from "https://cdn.jsdelivr.net/npm/showdown@2.1.0/+esm";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
+import { getFirestore, collection, query, orderBy, startAfter, limit, getDocs } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
+import { toHTML } from "https://cdn.jsdelivr.net/npm/@odiffey/discord-markdown@3.3.0/+esm";
 
 // Configs Firebase
+const configRTL = {
+    apiKey: "AIzaSyBw7PSHW4fe2jptxyf7xHtyINSrYG_TupA",
+    authDomain: "rtl-world.firebaseapp.com",
+    projectId: "rtl-world",
+    storageBucket: "rtl-world.firebasestorage.app",
+    messagingSenderId: "1092619392407",
+    appId: "1:1092619392407:web:f968b6ef5416d66d6360d2"
+};
+
 const configImago = {
     apiKey: "AIzaSyCaexv-0SVEmPeRNYt-WviKBiUhH-Ju7XQ",
     authDomain: "imago-veritatis.firebaseapp.com",
@@ -12,150 +21,158 @@ const configImago = {
     appId: "1:000000000000:web:exampleid1"
 };
 
-const configRTL = {
-    apiKey: "AIzaSyBw7PSHW4fe2jptxyf7xHtyINSrYG_TupA",
-    authDomain: "rtl-world.firebaseapp.com",
-    projectId: "rtl-world",
-    storageBucket: "rtl-world.firebasestorage.app",
-    messagingSenderId: "1092619392407",
-    appId: "1:1092619392407:web:f968b6ef5416d66d6360d2",
-    measurementId: "G-4GBT38563H"
+// Init apps séparées
+const appRTL = initializeApp(configRTL, "rtl");
+const appImago = initializeApp(configImago, "imago");
+const dbs = {
+    rtl: getFirestore(appRTL),
+    imago: getFirestore(appImago)
 };
 
-// Init Firebase
-const appImago = initializeApp(configImago, "imago");
-const appRTL = initializeApp(configRTL, "rtl");
-const dbImago = getFirestore(appImago);
-const dbRTL = getFirestore(appRTL);
+// Paramètres
+const pageSize = 8;
+let lastVisibleDocs = { rtl: null, imago: null };
+let hasMore = { rtl: true, imago: true };
+let isLoading = false;
+let currentSource = "all"; // "rtl", "imago" ou "all"
 
-// Markdown
-showdown.extension('smallText', function () {
-    return [{
-        type: 'lang',
-        regex: /-# (.*?)(\n|$)/g,
-        replace: '<small>$1</small>$2'
-    }];
-});
+const articlesContainer = document.getElementById("articles-container");
+const mediaFilter = document.getElementById("mediaFilter");
+const sentinel = document.createElement("div");
+sentinel.id = "scroll-sentinel";
+articlesContainer.after(sentinel);
 
-const converter = new showdown.Converter({
-    simplifiedAutoLink: true,
-    strikethrough: true,
-    tables: true,
-    extensions: ['smallText']
-});
+const allArticles = [];
 
-function getFullSourceName(key) {
-    return key === "imago" ? "Imago Veritatis" : key === "rtl" ? "RTL World" : "Inconnu";
-}
+function safeTruncate(html, maxLen) {
+  let truncated = html.slice(0, maxLen);
+  truncated = truncated.replace(/&[^\s;]*?$/, '');
+  truncated = truncated.replace(/<[^>]*?$/, '');
 
-let allArticles = [];
+  const openTags = [...truncated.matchAll(/<([a-z]+)(\s[^>]*)?>/gi)].map(m => m[1]);
+  const closeTags = [...truncated.matchAll(/<\/([a-z]+)>/gi)].map(m => m[1]);
 
-function getComparableDate(article) {
-    if (article.timestamp?.seconds) {
-        return new Date(article.timestamp.seconds * 1000);
+  const stack = [];
+  openTags.forEach(tag => {
+    const idxClose = closeTags.indexOf(tag);
+    if (idxClose !== -1) {
+      closeTags.splice(idxClose, 1);
+    } else {
+      stack.push(tag);
     }
-    if (typeof article.timestamp === "string") {
-        const [d, m, y] = article.timestamp.split("/");
-        return new Date(`${y}-${m}-${d}`);
+  });
+
+  stack.reverse().forEach(tag => {
+    truncated += `</${tag}>`;
+  });
+
+  return truncated;
+}
+
+function showPlaceholders() {
+  for (let i = 0; i < 3; i++) {
+    const p = document.createElement("div");
+    p.className = "article-card placeholder";
+    p.innerHTML = `<h2>Chargement...</h2><div class="shimmer"></div>`;
+    articlesContainer.appendChild(p);
+  }
+}
+
+function removePlaceholders() {
+  document.querySelectorAll(".placeholder").forEach(e => e.remove());
+}
+
+function displayArticles() {
+  articlesContainer.innerHTML = "";
+  let toDisplay = [...allArticles];
+  if (currentSource !== "all") {
+    toDisplay = toDisplay.filter(a => a.source === currentSource);
+  }
+  toDisplay
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .forEach(data => {
+      const el = document.createElement("div");
+      el.classList.add("article-card");
+      el.innerHTML = `
+        <a href="article.html?id=${data.id}&media=${data.source}" class="article-link">
+            <h2>${data.title}</h2>
+            <p>Auteur : ${data.author} – Publié le : ${data.dateStr} – Catégorie : ${data.category || "Non spécifiée"} – Source : ${data.source.toUpperCase()}</p>
+            <div>${data.preview}...</div>
+            ${data.meme ? `<img src="${data.meme}" alt="Illustration" class="article-image">` : ''}
+        </a>
+      `;
+      articlesContainer.appendChild(el);
+    });
+}
+
+async function loadBatch(source) {
+  if (isLoading || !hasMore[source]) return;
+  isLoading = true;
+  showPlaceholders();
+
+  const db = dbs[source];
+  const col = collection(db, "articles");
+  let q = query(col, orderBy("realTimestamp", "desc"), limit(pageSize));
+  if (lastVisibleDocs[source]) {
+    q = query(col, orderBy("realTimestamp", "desc"), startAfter(lastVisibleDocs[source]), limit(pageSize));
+  }
+
+  const snap = await getDocs(q);
+  removePlaceholders();
+
+  if (snap.empty) {
+    hasMore[source] = false;
+    isLoading = false;
+    return;
+  }
+
+  lastVisibleDocs[source] = snap.docs[snap.docs.length - 1];
+
+  for (const doc of snap.docs) {
+    const d = doc.data();
+    const html = toHTML(d.content || "");
+    const preview = safeTruncate(html.replaceAll('</small>', '</small><br>'), 300);
+    const timestamp = d.realTimestamp?.toDate() || new Date();
+
+    allArticles.push({
+      id: doc.id,
+      title: d.title,
+      author: d.author,
+      category: d.category,
+      meme: d.meme,
+      preview,
+      timestamp,
+      dateStr: timestamp.toLocaleDateString(),
+      source
+    });
+  }
+
+  displayArticles();
+  isLoading = false;
+}
+
+// Scroll infini
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting && currentSource !== "all") {
+      loadBatch(currentSource);
+    } else if (entry.isIntersecting && currentSource === "all") {
+      loadBatch("rtl");
+      loadBatch("imago");
     }
-    return new Date(0);
+  });
+}, { rootMargin: "200px" });
+
+observer.observe(sentinel);
+
+// Filtre
+if (mediaFilter) {
+  mediaFilter.addEventListener("change", () => {
+    currentSource = mediaFilter.value;
+    displayArticles();
+  });
 }
 
-async function loadArticles() {
-    const [snapImago, snapRTL] = await Promise.all([
-        getDocs(collection(dbImago, "articles")),
-        getDocs(collection(dbRTL, "articles"))
-    ]);
-
-    allArticles = [];
-
-    snapImago.forEach(doc => {
-        const data = doc.data();
-        data.id = doc.id;
-        data.source = "imago";
-        allArticles.push(data);
-    });
-
-    snapRTL.forEach(doc => {
-        const data = doc.data();
-        data.id = doc.id;
-        data.source = "rtl";
-        allArticles.push(data);
-    });
-
-    allArticles.sort((a, b) => getComparableDate(b) - getComparableDate(a));
-
-    populateMediaFilter();
-    updateCategoryFilter();
-    displayArticles(allArticles);
-
-    document.getElementById("mediaFilter").addEventListener("change", () => {
-        updateCategoryFilter();
-        filterAndDisplay();
-    });
-
-    document.getElementById("categoryFilter").addEventListener("change", () => {
-        filterAndDisplay();
-    });
-}
-
-function populateMediaFilter() {
-    // Media filter is already hardcoded
-}
-
-function updateCategoryFilter() {
-    const media = document.getElementById("mediaFilter").value;
-    const categories = new Set();
-
-    allArticles.forEach(a => {
-        if (media === "all" || a.source === media) {
-            if (a.category) categories.add(a.category);
-        }
-    });
-
-    const categoryFilter = document.getElementById("categoryFilter");
-    categoryFilter.innerHTML = '<option value="all">Toutes les catégories</option>';
-    Array.from(categories).sort().forEach(cat => {
-        const opt = document.createElement("option");
-        opt.value = cat;
-        opt.textContent = cat;
-        categoryFilter.appendChild(opt);
-    });
-}
-
-function filterAndDisplay() {
-    const media = document.getElementById("mediaFilter").value;
-    const category = document.getElementById("categoryFilter").value;
-
-    let filtered = allArticles.filter(a => {
-        return (media === "all" || a.source === media) &&
-               (category === "all" || a.category === category);
-    });
-
-    displayArticles(filtered);
-}
-
-function displayArticles(articles) {
-    const container = document.getElementById("articles-container");
-    container.innerHTML = "";
-
-    articles.forEach(article => {
-        const preview = converter.makeHtml(article.content.substring(0, 200));
-        const card = document.createElement("div");
-        card.className = "article-card";
-        card.innerHTML = `
-            <a href="article.html?id=${article.id}&media=${article.source}" class="article-link">
-                <h2>${article.title}</h2>
-                <p>
-                    Auteur : ${article.author} – Publié le : ${article.timestamp} – Catégorie : ${article.category || "Non spécifiée"} |
-                    Source : <strong>${getFullSourceName(article.source)}</strong>
-                </p>
-                <div>${preview}...</div>
-                ${article.meme ? `<img src="${article.meme}" alt="Illustration" class="article-image">` : ''}
-            </a>
-        `;
-        container.appendChild(card);
-    });
-}
-
-window.onload = loadArticles;
+// Initial load
+loadBatch("rtl");
+loadBatch("imago");

@@ -1,6 +1,6 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import showdown from "https://cdn.jsdelivr.net/npm/showdown@2.1.0/+esm";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
+import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
+import { toHTML } from "https://cdn.jsdelivr.net/npm/@odiffey/discord-markdown@3.3.0/+esm";
 
 // 🔧 Configs Firebase
 const configImago = {
@@ -28,77 +28,85 @@ const appRTL = initializeApp(configRTL, "rtl");
 const dbImago = getFirestore(appImago);
 const dbRTL = getFirestore(appRTL);
 
-// 🔍 Lecture des paramètres d'URL
 const urlParams = new URLSearchParams(window.location.search);
 const articleId = urlParams.get("id");
 const media = urlParams.get("media");
 
-// 📝 Convertisseur Markdown
-const converter = new showdown.Converter({
-  simplifiedAutoLink: true,
-  strikethrough: true,
-  tables: true
-});
+const toggleButton = document.getElementById('dropdownToggle');
+const dropdownMenu = document.getElementById('dropdownMenu');
 
-// 🔤 Nom complet de la source
-function getFullSourceName(sourceKey) {
-  if (sourceKey === "rtl") return "RTL World";
-  if (sourceKey === "imago") return "Imago Veritatis";
-  return "Inconnu";
+if (toggleButton && dropdownMenu) {
+  toggleButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdownMenu.style.display = (dropdownMenu.style.display === 'block') ? 'none' : 'block';
+  });
+
+  window.addEventListener('click', () => {
+    dropdownMenu.style.display = 'none';
+  });
+
+  dropdownMenu.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
 }
 
-// 📰 Chargement de l'article
+async function setLastArticleLink() {
+  const db = media === "imago" ? dbImago : dbRTL;
+  const articlesRef = collection(db, 'articles');
+  const q = query(articlesRef, orderBy('realTimestamp', 'desc'), limit(1));
+  const snapshot = await getDocs(q);
+  if (!snapshot.empty) {
+    const docSnap = snapshot.docs[0];
+    const link = document.getElementById('lastArticleLink');
+    link.href = `article.html?id=${docSnap.id}&media=${media}`;
+  }
+}
+setLastArticleLink();
+
+function getSourceFullName(media) {
+  switch (media) {
+    case "imago": return "Imago Veritatis";
+    case "rtl": return "RTL World";
+    default: return "Source inconnue";
+  }
+}
+
 async function loadArticle() {
-  try {
-    if (!articleId || !media) {
-      document.getElementById("article-content").innerHTML = "<p>Article introuvable</p>";
-      return;
-    }
+  if (!articleId || !media) {
+    document.getElementById("article-content").innerHTML = "<p>Article introuvable</p>";
+    return;
+  }
 
-    const db = media === "imago" ? dbImago : dbRTL;
-    const articleRef = doc(db, "articles", articleId);
-    const articleSnap = await getDoc(articleRef);
+  const db = media === "imago" ? dbImago : dbRTL;
+  const articleRef = doc(db, "articles", articleId);
+  const articleSnap = await getDoc(articleRef);    
 
-    if (!articleSnap.exists()) {
-      document.getElementById("article-content").innerHTML = "<p>Article non trouvé</p>";
-      return;
-    }
+  if (articleSnap.exists()) {
+    let article = articleSnap.data();
 
-    const article = articleSnap.data();
-    document.getElementById("article-category").textContent = article.category || "Non spécifiée";
-    document.title = `Article – ${article.title}`;
+    document.title = `${getSourceFullName(media)} - ${article.title}`;
 
-    // ✏️ Correction des sauts de ligne mal formés
-    let fixedMarkdown = article.content
-      .replace(/\n, /g, ', ')
-      .replace(/\n(?=[a-z])/g, ' ')
-      .replace(/<\/a>\n(?=, )/g, '</a>, ')
-      .replace(/-#\s*/g, '\n\n');
+    document.getElementById("article-category").textContent = article.category;
 
-    const htmlContent = converter.makeHtml(fixedMarkdown);
+    let discordContent = toHTML(article.content);
+    let htmlContent = discordContent.replaceAll('</small>', '</small><br>');
 
     document.getElementById("article-content").innerHTML = `
       <h1 class="article-title">${article.title}</h1>
-      <p class="article-meta">
-        Auteur : ${article.author} – Publié le : ${article.timestamp} – Catégorie : ${article.category || "Non spécifiée"} |
-        Source : ${getFullSourceName(media)}
-      </p>
+      <p class="article-meta">${article.author} - ${article.timestamp} | Source : ${getSourceFullName(media)}</p>
       <div class="article-body">${htmlContent}</div>
     `;
 
     if (article.image) {
-      const img = document.createElement("img");
+      let img = document.createElement("img");
       img.src = article.image;
       img.alt = "Illustration";
       img.classList.add("article-image");
       document.body.appendChild(img);
     }
-
-  } catch (error) {
-    console.error("Erreur de chargement :", error);
-    document.getElementById("article-content").innerHTML = "<p>Erreur de chargement de l'article.</p>";
+  } else {
+    document.getElementById("article-content").innerHTML = "<p>Article non trouvé</p>";
   }
 }
 
-// ✅ Lancement après chargement du DOM
-document.addEventListener("DOMContentLoaded", loadArticle);
+window.onload = loadArticle;

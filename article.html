@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chargement...</title>
+    <meta name="robots" content="index, follow">
+    <title>Chargement en cours, merci de patienter...</title>
     <link rel="stylesheet" href="article.css">
     <link rel="icon" type="image/png" href="logo.png">
 </head>
@@ -11,13 +12,20 @@
     <header class="main-header">
         <img src="logo.png" alt="Logo du journal" class="logo">
         <div id="article-category" class="category"></div>
-        <a href="https://discord.gg/UJDYnnFdcK" class="header-button">Discord Média du Listenbourg</a>
-        <a href="https://discord.gg/rZervsXnWs" class="header-button">Discord OMJL</a>
-        <!-- <a href="login.html" class="header-button">Connexion administrateur</a> -->
-        <a href="." class="header-button">Accueil</a>
+
+        <div class="dropdown">
+            <button id="dropdownToggle" class="header-button">+</button>
+            <div id="dropdownMenu" class="dropdown-content">
+                <a href="./">Accueil</a>
+                <a href="https://discord.gg/UJDYnnFdcK">Discord Média du Listenbourg</a>
+                <a href="https://discord.gg/rZervsXnWs">Discord OMJL</a>
+                <hr class="dropdown-separator">
+                <a id="lastArticleLink" href="#">Dernier article</a>
+            </div>
+        </div>
     </header>
+
     <div id="article-container">
-        <!-- <h1 id="article-title-display" class="article-title"></h1> -->
         <div id="article-content"></div>
     </div>
 

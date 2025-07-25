@@ -1,20 +1,22 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OMJL - Page d'accueil</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" type="image/png" href="logo.png" />
 </head>
 <body>
     <header class="main-header">
-        <img src="logo.png" alt="Logo de l'OMJL" class="logo">
+        <img src="logo.png" alt="Logo de l'OMJL" class="logo" />
         <span class="page-title">Page d'accueil</span>
 
-        <a href="https://discord.gg/UJDYnnFdcK" class="header-button">Discord Média du Listenbourg</a>
-        <a href="https://discord.gg/rZervsXnWs" class="header-button">Discord OMJL</a>
-        
+        <nav class="header-nav">
+            <a href="https://discord.gg/UJDYnnFdcK" class="header-button">Discord Média du Listenbourg</a>
+            <a href="https://discord.gg/rZervsXnWs" class="header-button">Discord OMJL</a>
+        </nav>
+
         <div class="header-select">
             <select id="mediaFilter">
                 <option value="all">Tous les médias</option>
@@ -25,14 +27,14 @@
                 <option value="all">Toutes les catégories</option>
             </select>
         </div>
-
-        
-        <!-- <a href="login.html" class="header-button">Connexion administrateur</a> -->
     </header>
 
-    <div id="articles-container"></div>
+    <main>
+        <div id="articles-container"></div>
+        <!-- Élément sentinelle pour le scroll infini -->
+        <div id="scroll-sentinel"></div>
+    </main>
 
     <script type="module" src="articles.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
 </body>
 </html>
