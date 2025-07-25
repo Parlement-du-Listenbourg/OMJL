@@ -1,162 +1,161 @@
-// articles.js combiné pour RTL World et Imago Veritatis
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import showdown from "https://cdn.jsdelivr.net/npm/showdown@2.1.0/+esm";
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
-import {
-  getFirestore,
-  collection,
-  getDocs,
-  query,
-  orderBy,
-  startAfter,
-  limit
-} from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
-import { toHTML } from "https://cdn.jsdelivr.net/npm/@odiffey/discord-markdown@3.3.0/+esm";
+// Configs Firebase
+const configImago = {
+    apiKey: "AIzaSyCaexv-0SVEmPeRNYt-WviKBiUhH-Ju7XQ",
+    authDomain: "imago-veritatis.firebaseapp.com",
+    projectId: "imago-veritatis",
+    storageBucket: "imago-veritatis.appspot.com",
+    messagingSenderId: "000000000000",
+    appId: "1:000000000000:web:exampleid1"
+};
 
-const configs = [
-  {
-    name: "RTL World",
-    source: "rtl-world",
-    firebaseConfig: {
-      apiKey: "AIzaSyBw7PSHW4fe2jptxyf7xHtyINSrYG_TupA",
-      authDomain: "rtl-world.firebaseapp.com",
-      projectId: "rtl-world"
-    }
-  },
-  {
-    name: "Imago Veritatis",
-    source: "imago-veritatis",
-    firebaseConfig: {
-      apiKey: "AIzaSyCaexv-0SVEmPeRNYt-WviKBiUhH-Ju7XQ",
-      authDomain: "imago-veritatis.firebaseapp.com",
-      projectId: "imago-veritatis"
-    }
-  }
-];
+const configRTL = {
+    apiKey: "AIzaSyBw7PSHW4fe2jptxyf7xHtyINSrYG_TupA",
+    authDomain: "rtl-world.firebaseapp.com",
+    projectId: "rtl-world",
+    storageBucket: "rtl-world.firebasestorage.app",
+    messagingSenderId: "1092619392407",
+    appId: "1:1092619392407:web:f968b6ef5416d66d6360d2",
+    measurementId: "G-4GBT38563H"
+};
 
-const pageSize = 6;
-let allArticles = [];
-let lastVisiblePerSource = {};
-let isLoading = false;
-let hasMore = true;
-const articlesContainer = document.getElementById("articles");
-const categoryFilter = document.getElementById("categoryFilter");
-const sentinel = document.createElement("div");
-sentinel.id = "scroll-sentinel";
-articlesContainer.after(sentinel);
-const categoriesSet = new Set();
+// Init Firebase
+const appImago = initializeApp(configImago, "imago");
+const appRTL = initializeApp(configRTL, "rtl");
+const dbImago = getFirestore(appImago);
+const dbRTL = getFirestore(appRTL);
 
-categoryFilter.addEventListener("change", () => {
-  const selected = categoryFilter.value;
-  const filtered = selected === "all" ? allArticles : allArticles.filter(a => a.category === selected);
-  displayArticlesFromList(filtered);
+// Markdown
+showdown.extension('smallText', function () {
+    return [{
+        type: 'lang',
+        regex: /-# (.*?)(\n|$)/g,
+        replace: '<small>$1</small>$2'
+    }];
 });
 
-function safeTruncate(html, maxLen) {
-  let truncated = html.slice(0, maxLen);
-  truncated = truncated.replace(/&[^\s;]*?$/, '');
-  truncated = truncated.replace(/<[^>]*?$/, '');
-  const openTags = [...truncated.matchAll(/<([a-z]+)(\s[^>]*)?>/gi)].map(m => m[1]);
-  const closeTags = [...truncated.matchAll(/<\/([a-z]+)>/gi)].map(m => m[1]);
-  const stack = [];
-  openTags.forEach(tag => {
-    const idxClose = closeTags.indexOf(tag);
-    if (idxClose !== -1) closeTags.splice(idxClose, 1);
-    else stack.push(tag);
-  });
-  stack.reverse().forEach(tag => truncated += `</${tag}>`);
-  return truncated;
+const converter = new showdown.Converter({
+    simplifiedAutoLink: true,
+    strikethrough: true,
+    tables: true,
+    extensions: ['smallText']
+});
+
+function getFullSourceName(key) {
+    return key === "imago" ? "Imago Veritatis" : key === "rtl" ? "RTL World" : "Inconnu";
 }
 
-function displayArticlesFromList(list) {
-  articlesContainer.innerHTML = "";
-  list.forEach(article => {
-    const el = document.createElement("div");
-    el.classList.add("article-card");
-    el.innerHTML = `
-      <a href="article.html?id=${article.id}" class="article-link">
-          <h2>${article.title}</h2>
-          <p>Auteur : ${article.author} - Publié le : ${article.dateStr} - Catégorie : ${article.category} - Source : ${article.source}</p>
-          <div>${article.previewHTML}...</div>
-          ${article.meme ? `<img src="${article.meme}" alt="Meme" class="article-image">` : ''}
-      </a>
-    `;
-    articlesContainer.appendChild(el);
-  });
-}
+let allArticles = [];
 
-async function fetchArticlesFromSource(config) {
-  const app = initializeApp(config.firebaseConfig, config.source);
-  const db = getFirestore(app);
-  const articlesRef = collection(db, "articles");
-
-  let q = query(articlesRef, orderBy("realTimestamp", "desc"), limit(pageSize));
-  if (lastVisiblePerSource[config.source]) {
-    q = query(articlesRef, orderBy("realTimestamp", "desc"), startAfter(lastVisiblePerSource[config.source]), limit(pageSize));
-  }
-
-  const snapshot = await getDocs(q);
-  if (snapshot.empty) return [];
-  lastVisiblePerSource[config.source] = snapshot.docs[snapshot.docs.length - 1];
-
-  return snapshot.docs.map(docSnap => {
-    const data = docSnap.data();
-    const discordContent = toHTML(data.content || "");
-    const htmlContent = discordContent.replaceAll('</small>', '</small><br>');
-
-    const dateObj = data.realTimestamp?.toDate?.() || new Date(0);
-
-    return {
-      id: docSnap.id,
-      title: data.title,
-      author: data.author,
-      category: data.category,
-      meme: data.meme,
-      dateStr: dateObj.toLocaleDateString("fr-FR", {
-        day: "2-digit",
-        month: "long",
-        year: "numeric"
-      }),
-      dateObj,
-      previewHTML: safeTruncate(htmlContent, 300),
-      source: config.name
-    };
-  });
-}
-
-async function loadNextBatch() {
-  if (isLoading || !hasMore) return;
-  isLoading = true;
-
-  const batchArticles = await Promise.all(configs.map(fetchArticlesFromSource));
-  const newArticles = batchArticles.flat();
-
-  if (newArticles.length === 0) {
-    hasMore = false;
-    isLoading = false;
-    return;
-  }
-
-  allArticles = [...allArticles, ...newArticles].sort((a, b) => b.dateObj - a.dateObj);
-
-  newArticles.forEach(article => {
-    if (article.category && !categoriesSet.has(article.category)) {
-      categoriesSet.add(article.category);
-      const option = document.createElement("option");
-      option.value = article.category;
-      option.textContent = article.category;
-      categoryFilter.appendChild(option);
+function getComparableDate(article) {
+    if (article.timestamp?.seconds) {
+        return new Date(article.timestamp.seconds * 1000);
     }
-  });
-
-  displayArticlesFromList(allArticles);
-  isLoading = false;
+    if (typeof article.timestamp === "string") {
+        const [d, m, y] = article.timestamp.split("/");
+        return new Date(`${y}-${m}-${d}`);
+    }
+    return new Date(0);
 }
 
-const observer = new IntersectionObserver(entries => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) loadNextBatch();
-  });
-}, { rootMargin: "200px" });
-observer.observe(sentinel);
+async function loadArticles() {
+    const [snapImago, snapRTL] = await Promise.all([
+        getDocs(collection(dbImago, "articles")),
+        getDocs(collection(dbRTL, "articles"))
+    ]);
 
-loadNextBatch();
+    allArticles = [];
+
+    snapImago.forEach(doc => {
+        const data = doc.data();
+        data.id = doc.id;
+        data.source = "imago";
+        allArticles.push(data);
+    });
+
+    snapRTL.forEach(doc => {
+        const data = doc.data();
+        data.id = doc.id;
+        data.source = "rtl";
+        allArticles.push(data);
+    });
+
+    allArticles.sort((a, b) => getComparableDate(b) - getComparableDate(a));
+
+    populateMediaFilter();
+    updateCategoryFilter();
+    displayArticles(allArticles);
+
+    document.getElementById("mediaFilter").addEventListener("change", () => {
+        updateCategoryFilter();
+        filterAndDisplay();
+    });
+
+    document.getElementById("categoryFilter").addEventListener("change", () => {
+        filterAndDisplay();
+    });
+}
+
+function populateMediaFilter() {
+    // Media filter is already hardcoded
+}
+
+function updateCategoryFilter() {
+    const media = document.getElementById("mediaFilter").value;
+    const categories = new Set();
+
+    allArticles.forEach(a => {
+        if (media === "all" || a.source === media) {
+            if (a.category) categories.add(a.category);
+        }
+    });
+
+    const categoryFilter = document.getElementById("categoryFilter");
+    categoryFilter.innerHTML = '<option value="all">Toutes les catégories</option>';
+    Array.from(categories).sort().forEach(cat => {
+        const opt = document.createElement("option");
+        opt.value = cat;
+        opt.textContent = cat;
+        categoryFilter.appendChild(opt);
+    });
+}
+
+function filterAndDisplay() {
+    const media = document.getElementById("mediaFilter").value;
+    const category = document.getElementById("categoryFilter").value;
+
+    let filtered = allArticles.filter(a => {
+        return (media === "all" || a.source === media) &&
+               (category === "all" || a.category === category);
+    });
+
+    displayArticles(filtered);
+}
+
+function displayArticles(articles) {
+    const container = document.getElementById("articles-container");
+    container.innerHTML = "";
+
+    articles.forEach(article => {
+        const preview = converter.makeHtml(article.content.substring(0, 200));
+        const card = document.createElement("div");
+        card.className = "article-card";
+        card.innerHTML = `
+            <a href="article.html?id=${article.id}&media=${article.source}" class="article-link">
+                <h2>${article.title}</h2>
+                <p>
+                    Auteur : ${article.author} – Publié le : ${article.timestamp} – Catégorie : ${article.category || "Non spécifiée"} |
+                    Source : <strong>${getFullSourceName(article.source)}</strong>
+                </p>
+                <div>${preview}...</div>
+                ${article.meme ? `<img src="${article.meme}" alt="Illustration" class="article-image">` : ''}
+            </a>
+        `;
+        container.appendChild(card);
+    });
+}
+
+window.onload = loadArticles;
