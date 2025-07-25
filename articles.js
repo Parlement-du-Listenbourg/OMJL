@@ -125,11 +125,17 @@ async function loadBatch(source) {
     const html = toHTML(d.content || "");
     const preview = safeTruncate(html.replaceAll('</small>', '</small><br>'), 300);
 
-    const timestamp = typeof d.realTimestamp?.toDate === 'function'
-      ? d.realTimestamp.toDate()
-      : d.realTimestamp?.seconds
-      ? new Date(d.realTimestamp.seconds * 1000)
-      : new Date();
+  const timestamp = typeof d.realTimestamp?.toDate === 'function'
+    ? d.realTimestamp.toDate()
+    : d.realTimestamp?.seconds
+    ? new Date(d.realTimestamp.seconds * 1000)
+    : new Date();
+
+  const dateStr = timestamp.toLocaleString("fr-FR", {
+    dateStyle: "long",
+    timeStyle: "short"
+  });
+
 
     allArticles.push({
       id: doc.id,
@@ -139,7 +145,7 @@ async function loadBatch(source) {
       meme: d.meme,
       preview,
       timestamp,
-      dateStr: timestamp.toLocaleDateString(),
+      dateStr:
       source
     });
   }
