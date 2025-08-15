@@ -50,17 +50,17 @@ if (toggleButton && dropdownMenu) {
   });
 }
 
-async function setLastArticleLink() {
-  const db = media === "imago" ? dbImago : dbRTL;
-  const articlesRef = collection(db, 'articles');
-  const q = query(articlesRef, orderBy('realTimestamp', 'desc'), limit(1));
-  const snapshot = await getDocs(q);
-  if (!snapshot.empty) {
-    const docSnap = snapshot.docs[0];
-    const link = document.getElementById('lastArticleLink');
-    link.href = `article.html?id=${docSnap.id}&media=${media}`;
-  }
-}
+//async function setLastArticleLink() {
+  //const db = media === "imago" ? dbImago : dbRTL;
+  //const articlesRef = collection(db, 'articles');
+  //const q = query(articlesRef, orderBy('realTimestamp', 'desc'), limit(1));
+  //const snapshot = await getDocs(q);
+  //if (!snapshot.empty) {
+    //const docSnap = snapshot.docs[0];
+    //const link = document.getElementById('lastArticleLink');
+    //link.href = `article.html?id=${docSnap.id}&media=${media}`;
+  //}
+//}
 setLastArticleLink();
 
 function getSourceFullName(media) {
@@ -106,6 +106,63 @@ async function loadArticle() {
     }
   } else {
     document.getElementById("article-content").innerHTML = "<p>Article non trouvé</p>";
+  }
+}
+async function setLastArticleLink() {
+  try {
+    console.log("Début de la récupération du dernier article...");
+
+    // Récupérer le dernier article de chaque journal
+    const [imagoSnapshot, rtlSnapshot] = await Promise.all([
+      getDocs(query(collection(dbImago, 'articles'), orderBy('realTimestamp', 'desc'), limit(1))),
+      getDocs(query(collection(dbRTL, 'articles'), orderBy('realTimestamp', 'desc'), limit(1)))
+    ]);
+
+    console.log("Nombre d'articles Imago récupérés :", imagoSnapshot.size);
+    console.log("Nombre d'articles RTL récupérés :", rtlSnapshot.size);
+
+    let latestArticle = null;
+    let latestDate = new Date(0); // Date très ancienne
+
+    // Vérifiez le dernier article d'Imago
+    if (!imagoSnapshot.empty) {
+      const docSnap = imagoSnapshot.docs[0];
+      const articleData = docSnap.data();
+      const articleDate = getComparableDate(articleData);
+      console.log("Dernier article Imago trouvé :", articleData, "Date :", articleDate);
+
+      if (articleDate > latestDate) {
+        latestDate = articleDate;
+        latestArticle = { id: docSnap.id, source: 'imago', ...articleData };
+      }
+    }
+
+    // Vérifiez le dernier article de RTL
+    if (!rtlSnapshot.empty) {
+      const docSnap = rtlSnapshot.docs[0];
+      const articleData = docSnap.data();
+      const articleDate = getComparableDate(articleData);
+      console.log("Dernier article RTL trouvé :", articleData, "Date :", articleDate);
+
+      if (articleDate > latestDate) {
+        latestDate = articleDate;
+        latestArticle = { id: docSnap.id, source: 'rtl', ...articleData };
+      }
+    }
+
+    if (latestArticle) {
+      const link = document.getElementById('lastArticleLink');
+      if (link) {
+        link.href = `article.html?id=${latestArticle.id}&media=${latestArticle.source}`;
+        console.log("Lien du dernier article mis à jour :", link.href);
+      } else {
+        console.error("Élément 'lastArticleLink' non trouvé dans le DOM.");
+      }
+    } else {
+      console.warn("Aucun article trouvé pour mettre à jour le lien du dernier article.");
+    }
+  } catch (error) {
+    console.error("Erreur lors de la récupération du dernier article :", error);
   }
 }
 

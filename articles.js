@@ -107,6 +107,41 @@ async function loadArticles() {
     });
 }
 
+async function loadArticles() {
+    const [snapImago, snapRTL] = await Promise.all([
+        getDocs(collection(dbImago, "articles")),
+        getDocs(collection(dbRTL, "articles"))
+    ]);
+    allArticles = [];
+    snapImago.forEach(doc => {
+        const data = doc.data();
+        data.id = doc.id;
+        data.source = "imago";
+        allArticles.push(data);
+    });
+    snapRTL.forEach(doc => {
+        const data = doc.data();
+        data.id = doc.id;
+        data.source = "rtl";
+        allArticles.push(data);
+    });
+    // Tri par date descendante
+    allArticles.sort((a, b) => getComparableDate(b) - getComparableDate(a));
+    populateMediaFilter();
+    updateCategoryFilter();
+    displayArticles(allArticles);
+    document.getElementById("mediaFilter").addEventListener("change", () => {
+        updateCategoryFilter();
+        filterAndDisplay();
+    });
+    document.getElementById("categoryFilter").addEventListener("change", () => {
+        filterAndDisplay();
+    });
+
+    // Ajoutez cet appel pour mettre à jour le lien du dernier article
+    await setLastArticleLink();
+}
+
 // Remplit la liste de médias (si besoin un jour)
 function populateMediaFilter() {
     // Si jamais tu veux remplir dynamiquement, code à ajouter ici
@@ -162,5 +197,22 @@ function displayArticles(articles) {
         container.appendChild(card);
     });
 }
+
+// Gestion du bouton de dropdown
+const toggleButton = document.getElementById('dropdownToggle');
+const dropdownMenu = document.getElementById('dropdownMenu');
+if (toggleButton && dropdownMenu) {
+  toggleButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdownMenu.style.display = (dropdownMenu.style.display === 'block') ? 'none' : 'block';
+  });
+  window.addEventListener('click', () => {
+    dropdownMenu.style.display = 'none';
+  });
+  dropdownMenu.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+}
+
 
 window.onload = loadArticles;
