@@ -1,8 +1,17 @@
-import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
+// articles.js – OMJL (Imago + RTL) — version corrigée
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  limit,
+} from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
 import showdown from "https://cdn.jsdelivr.net/npm/showdown@2.1.0/+esm";
 
-// --- Configs Firebase
+// --------- Firebase configs ---------
 const configImago = {
   apiKey: "AIzaSyCaexv-0SVEmPeRNYt-WviKBiUhH-Ju7XQ",
   authDomain: "imago-veritatis.firebaseapp.com",
@@ -21,58 +30,139 @@ const configRTL = {
   measurementId: "G-4GBT38563H"
 };
 
-// --- Init Firebase
 const appImago = initializeApp(configImago, "imago");
-const appRTL   = initializeApp(configRTL,  "rtl");
+const appRTL   = initializeApp(configRTL,   "rtl");
 const dbImago  = getFirestore(appImago);
 const dbRTL    = getFirestore(appRTL);
 
-// --- Markdown converter (même rendu que tes sites)
+// --------- Markdown (showdown) ---------
 showdown.extension("smallText", function () {
-  return [{ type: "lang", regex: /-# (.*?)(\n|$)/g, replace: "<small>$1</small>$2" }];
+  return [{
+    type: "lang",
+    regex: /-# (.*?)(\n|$)/g,
+    replace: "<small>$1</small>$2",
+  }];
 });
 const converter = new showdown.Converter({
-  simplifiedAutoLink: true, strikethrough: true, tables: true, extensions: ["smallText"]
+  simplifiedAutoLink: true,
+  strikethrough: true,
+  tables: true,
+  extensions: ["smallText"],
 });
 
-// --- Utilitaires
+// --------- Helpers ---------
 function getFullSourceName(key) {
-  return key === "imago" ? "Imago Veritatis" : key === "rtl" ? "RTL World" : "Inconnu";
+  return key === "imago" ? "Imago Veritatis"
+       : key === "rtl"   ? "RTL World"
+       : "Inconnu";
 }
-function getComparableDate(article) {
-  // Firestore Timestamp (objet)
-  if (article.realTimestamp?.seconds) return new Date(article.realTimestamp.seconds * 1000);
-  if (article.timestamp?.seconds)     return new Date(article.timestamp.seconds * 1000);
 
-  // Chaîne JJ/MM/AAAA
-  if (typeof article.timestamp === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(article.timestamp)) {
-    const [d, m, y] = article.timestamp.split("/");
+function toDateSafe(obj) {
+  // Préférence: realTimestamp (Firestore Timestamp)
+  if (obj?.realTimestamp && typeof obj.realTimestamp.toDate === "function") {
+    return obj.realTimestamp.toDate();
+  }
+  // Autre Timestamp Firestore (timestamp.seconds)
+  if (obj?.timestamp && typeof obj.timestamp === "object" && "seconds" in obj.timestamp) {
+    return new Date(obj.timestamp.seconds * 1000);
+  }
+  // Chaîne "JJ/MM/AAAA"
+  if (typeof obj?.timestamp === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(obj.timestamp)) {
+    const [d, m, y] = obj.timestamp.split("/");
     return new Date(`${y}-${m}-${d}`);
   }
-  // Chaîne ISO ou autre
-  if (typeof article.timestamp === "string") return new Date(article.timestamp);
-
-  return new Date(0); // fallback ancien
+  // Chaîne quelconque parseable
+  if (typeof obj?.timestamp === "string") {
+    const d = new Date(obj.timestamp);
+    if (!isNaN(+d)) return d;
+  }
+  return new Date(0);
 }
 
-// --- État
+function previewHTMLFrom(content) {
+  const md = (content || "").substring(0, 200);
+  return converter.makeHtml(md);
+}
+
+// --------- État ---------
 let allArticles = [];
 
-// --- Affichage
+// --------- Remplit le lien "Dernier article" (toutes sources) ---------
+async function setLastArticleLink() {
+  const [snapIm, snapRtl] = await Promise.all([
+    getDocs(query(collection(dbImago, "articles"), orderBy("realTimestamp", "desc"), limit(1))),
+    getDocs(query(collection(dbRTL,   "articles"), orderBy("realTimestamp", "desc"), limit(1))),
+  ]);
+
+  const cand = [];
+
+  if (!snapIm.empty) {
+    const d = snapIm.docs[0].data();
+    cand.push({ when: toDateSafe(d), id: snapIm.docs[0].id, media: "imago" });
+  }
+  if (!snapRtl.empty) {
+    const d = snapRtl.docs[0].data();
+    cand.push({ when: toDateSafe(d), id: snapRtl.docs[0].id, media: "rtl" });
+  }
+
+  if (cand.length) {
+    cand.sort((a, b) => b.when - a.when);
+    const last = cand[0];
+    const a = document.getElementById("lastArticleLink");
+    if (a) a.href = `article.html?id=${last.id}&media=${last.media}`;
+  }
+}
+
+// --------- Filtres ---------
+function populateMediaFilter() {
+  // rien à faire pour l’instant (menu déjà codé en HTML)
+}
+
+function updateCategoryFilter() {
+  const media = document.getElementById("mediaFilter").value;
+  const categories = new Set();
+
+  allArticles.forEach(a => {
+    if (media === "all" || a.source === media) {
+      if (a.category) categories.add(a.category);
+    }
+  });
+
+  const categoryFilter = document.getElementById("categoryFilter");
+  categoryFilter.innerHTML = '<option value="all">Toutes les catégories</option>';
+  Array.from(categories).sort().forEach(cat => {
+    const opt = document.createElement("option");
+    opt.value = cat;
+    opt.textContent = cat;
+    categoryFilter.appendChild(opt);
+  });
+}
+
+function filterAndDisplay() {
+  const media = document.getElementById("mediaFilter").value;
+  const category = document.getElementById("categoryFilter").value;
+
+  const filtered = allArticles.filter(a =>
+    (media === "all" || a.source === media) &&
+    (category === "all" || a.category === category)
+  );
+  displayArticles(filtered);
+}
+
+// --------- Affichage ---------
 function displayArticles(articles) {
   const container = document.getElementById("articles-container");
-  if (!container) return;
   container.innerHTML = "";
 
   articles.forEach(article => {
-    const preview = converter.makeHtml((article.content || "").substring(0, 200));
+    const preview = previewHTMLFrom(article.content);
     const card = document.createElement("div");
     card.className = "article-card";
     card.innerHTML = `
       <a href="article.html?id=${article.id}&media=${article.source}" class="article-link">
-        <h2>${article.title || "(Sans titre)"}</h2>
+        <h2>${article.title}</h2>
         <p>
-          Auteur : ${article.author || "Anonyme"} – Publié le : ${article.timestamp ? article.timestamp : "?"}
+          Auteur : ${article.author || "Anonyme"} – Publié le : ${article.timestamp || "?"}
           – Catégorie : ${article.category || "Non spécifiée"} |
           Source : <strong>${getFullSourceName(article.source)}</strong>
         </p>
@@ -84,65 +174,11 @@ function displayArticles(articles) {
   });
 }
 
-function updateCategoryFilter() {
-  const mediaSel = document.getElementById("mediaFilter");
-  const catSel   = document.getElementById("categoryFilter");
-  if (!mediaSel || !catSel) return;
-
-  const media = mediaSel.value;
-  const categories = new Set();
-  allArticles.forEach(a => {
-    if (media === "all" || a.source === media) if (a.category) categories.add(a.category);
-  });
-
-  catSel.innerHTML = '<option value="all">Toutes les catégories</option>';
-  Array.from(categories).sort().forEach(cat => {
-    const opt = document.createElement("option");
-    opt.value = cat; opt.textContent = cat;
-    catSel.appendChild(opt);
-  });
-}
-
-function filterAndDisplay() {
-  const mediaSel = document.getElementById("mediaFilter");
-  const catSel   = document.getElementById("categoryFilter");
-  if (!mediaSel || !catSel) return;
-
-  const media = mediaSel.value;
-  const category = catSel.value;
-
-  const filtered = allArticles.filter(a =>
-    (media === "all" || a.source === media) &&
-    (category === "all" || a.category === category)
-  );
-  displayArticles(filtered);
-}
-
-// --- Lien vers le dernier article (toutes sources confondues)
-function setLastArticleLink() {
-  const link = document.getElementById("lastArticleLink");
-  if (!link || allArticles.length === 0) return;
-  const latest = [...allArticles].sort((a, b) => getComparableDate(b) - getComparableDate(a))[0];
-  link.href = `article.html?id=${latest.id}&media=${latest.source}`;
-}
-
-// --- Dropdown header
-const toggleButton = document.getElementById("dropdownToggle");
-const dropdownMenu = document.getElementById("dropdownMenu");
-if (toggleButton && dropdownMenu) {
-  toggleButton.addEventListener("click", (e) => {
-    e.stopPropagation();
-    dropdownMenu.style.display = dropdownMenu.style.display === "block" ? "none" : "block";
-  });
-  window.addEventListener("click", () => dropdownMenu.style.display = "none");
-  dropdownMenu.addEventListener("click", (e) => e.stopPropagation());
-}
-
-// --- Chargement
+// --------- Chargement principal (UNE SEULE FOIS) ---------
 async function loadArticles() {
   const [snapImago, snapRTL] = await Promise.all([
     getDocs(collection(dbImago, "articles")),
-    getDocs(collection(dbRTL,   "articles"))
+    getDocs(collection(dbRTL, "articles")),
   ]);
 
   allArticles = [];
@@ -153,6 +189,7 @@ async function loadArticles() {
     data.source = "imago";
     allArticles.push(data);
   });
+
   snapRTL.forEach(docSnap => {
     const data = docSnap.data();
     data.id = docSnap.id;
@@ -160,19 +197,35 @@ async function loadArticles() {
     allArticles.push(data);
   });
 
-  // Tri global par date décroissante (utilise realTimestamp si présent)
-  allArticles.sort((a, b) => getComparableDate(b) - getComparableDate(a));
+  // Tri par date décroissante
+  allArticles.sort((a, b) => toDateSafe(b) - toDateSafe(a));
 
+  populateMediaFilter();
   updateCategoryFilter();
   displayArticles(allArticles);
-  setLastArticleLink();
 
-  // Listeners (attachés une seule fois ici)
-  const mediaSel = document.getElementById("mediaFilter");
-  const catSel   = document.getElementById("categoryFilter");
-  if (mediaSel) mediaSel.addEventListener("change", () => { updateCategoryFilter(); filterAndDisplay(); });
-  if (catSel)   catSel.addEventListener("change", filterAndDisplay);
+  // Filtres (une seule fois)
+  document.getElementById("mediaFilter").addEventListener("change", () => {
+    updateCategoryFilter();
+    filterAndDisplay();
+  });
+  document.getElementById("categoryFilter").addEventListener("change", filterAndDisplay);
+
+  // Lien "Dernier article"
+  await setLastArticleLink();
+}
+
+// --------- Dropdown header ---------
+const toggleButton = document.getElementById("dropdownToggle");
+const dropdownMenu = document.getElementById("dropdownMenu");
+if (toggleButton && dropdownMenu) {
+  toggleButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dropdownMenu.style.display = (dropdownMenu.style.display === "block") ? "none" : "block";
+  });
+  window.addEventListener("click", () => (dropdownMenu.style.display = "none"));
+  dropdownMenu.addEventListener("click", (e) => e.stopPropagation());
 }
 
 // Démarrage
-window.onload = loadArticles;
+window.addEventListener("DOMContentLoaded", loadArticles);
