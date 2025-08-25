@@ -1,4 +1,4 @@
-// articles.js – OMJL (Imago + RTL) — version corrigée
+// articles.js — OMJL (Imago + RTL) — affichage simple des images (pas de redimension JS)
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
 import {
@@ -11,14 +11,14 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
 import showdown from "https://cdn.jsdelivr.net/npm/showdown@2.1.0/+esm";
 
-// --------- Firebase configs ---------
+// ---------- Config Firebase ----------
 const configImago = {
   apiKey: "AIzaSyCaexv-0SVEmPeRNYt-WviKBiUhH-Ju7XQ",
   authDomain: "imago-veritatis.firebaseapp.com",
   projectId: "imago-veritatis",
   storageBucket: "imago-veritatis.appspot.com",
   messagingSenderId: "000000000000",
-  appId: "1:000000000000:web:exampleid1"
+  appId: "1:000000000000:web:exampleid1",
 };
 const configRTL = {
   apiKey: "AIzaSyBw7PSHW4fe2jptxyf7xHtyINSrYG_TupA",
@@ -27,7 +27,7 @@ const configRTL = {
   storageBucket: "rtl-world.firebasestorage.app",
   messagingSenderId: "1092619392407",
   appId: "1:1092619392407:web:f968b6ef5416d66d6360d2",
-  measurementId: "G-4GBT38563H"
+  measurementId: "G-4GBT38563H",
 };
 
 const appImago = initializeApp(configImago, "imago");
@@ -35,72 +35,55 @@ const appRTL   = initializeApp(configRTL,   "rtl");
 const dbImago  = getFirestore(appImago);
 const dbRTL    = getFirestore(appRTL);
 
-// --------- Markdown (showdown) ---------
-showdown.extension("smallText", function () {
-  return [{
-    type: "lang",
-    regex: /-# (.*?)(\n|$)/g,
-    replace: "<small>$1</small>$2",
-  }];
-});
-const converter = new showdown.Converter({
-  simplifiedAutoLink: true,
-  strikethrough: true,
-  tables: true,
-  extensions: ["smallText"],
-});
+// ---------- Showdown (Markdown) ----------
+showdown.extension("smallText", () => [{
+  type: "lang",
+  regex: /-# (.*?)(\n|$)/g,
+  replace: "<small>$1</small>$2",
+}]);
 
-// === Emoji via images hébergées sur GitHub Pages ===
+// Emojis personnalisés : on remplace simplement par <img src="..."> sans taille
 const EMOJI_MAP = {
   ":lieu:"  : "https://parlement-du-listenbourg.github.io/OMJL/emojis/lieu.png",
   ":source:": "https://parlement-du-listenbourg.github.io/OMJL/emojis/source.png",
-  ":logo:"  : "https://parlement-du-listenbourg.github.io/OMJL/emojis/logo.png"
+  ":logo:"  : "https://parlement-du-listenbourg.github.io/OMJL/emojis/logo.png",
 };
+showdown.extension("customEmoji", () => [{
+  type: "lang",
+  regex: /:(lieu|source|logo):/g,
+  replace: (match, key) => {
+    const url = EMOJI_MAP[":" + key + ":"];
+    return url ? `<img src="${url}" alt="${match}" loading="lazy">` : match;
+  },
+}]);
 
-showdown.extension('customEmoji', function () {
-  return [{
-    type: 'lang',
-    regex: /:(lieu|source|logo):/g,
-    replace: (match, key) => {
-      const url = EMOJI_MAP[":" + key + ":"];
-      return url
-        ? `<img class="emoji" src="${url}" alt="${match}" loading="lazy">`
-        : match;
-    }
-  }];
-});
-
-// IMPORTANT : ajoute 'customEmoji' dans la liste des extensions du converter
 const converter = new showdown.Converter({
   simplifiedAutoLink: true,
   strikethrough: true,
   tables: true,
-  extensions: ['smallText', 'customEmoji']
+  extensions: ["smallText", "customEmoji"],
 });
 
-// --------- Helpers ---------
+// ---------- Helpers ----------
 function getFullSourceName(key) {
   return key === "imago" ? "Imago Veritatis"
        : key === "rtl"   ? "RTL World"
        : "Inconnu";
 }
 
+// Convertit les dates en Date fiable (prend realTimestamp en priorité)
 function toDateSafe(obj) {
-  // Préférence: realTimestamp (Firestore Timestamp)
   if (obj?.realTimestamp && typeof obj.realTimestamp.toDate === "function") {
     return obj.realTimestamp.toDate();
   }
-  // Autre Timestamp Firestore (timestamp.seconds)
   if (obj?.timestamp && typeof obj.timestamp === "object" && "seconds" in obj.timestamp) {
     return new Date(obj.timestamp.seconds * 1000);
   }
-  // Chaîne "JJ/MM/AAAA"
-  if (typeof obj?.timestamp === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(obj.timestamp)) {
-    const [d, m, y] = obj.timestamp.split("/");
-    return new Date(`${y}-${m}-${d}`);
-  }
-  // Chaîne quelconque parseable
   if (typeof obj?.timestamp === "string") {
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(obj.timestamp)) {
+      const [d, m, y] = obj.timestamp.split("/");
+      return new Date(`${y}-${m}-${d}`);
+    }
     const d = new Date(obj.timestamp);
     if (!isNaN(+d)) return d;
   }
@@ -112,10 +95,10 @@ function previewHTMLFrom(content) {
   return converter.makeHtml(md);
 }
 
-// --------- État ---------
+// ---------- État ----------
 let allArticles = [];
 
-// --------- Remplit le lien "Dernier article" (toutes sources) ---------
+// ---------- Lien "Dernier article" (toutes sources confondues) ----------
 async function setLastArticleLink() {
   const [snapIm, snapRtl] = await Promise.all([
     getDocs(query(collection(dbImago, "articles"), orderBy("realTimestamp", "desc"), limit(1))),
@@ -123,7 +106,6 @@ async function setLastArticleLink() {
   ]);
 
   const cand = [];
-
   if (!snapIm.empty) {
     const d = snapIm.docs[0].data();
     cand.push({ when: toDateSafe(d), id: snapIm.docs[0].id, media: "imago" });
@@ -141,11 +123,7 @@ async function setLastArticleLink() {
   }
 }
 
-// --------- Filtres ---------
-function populateMediaFilter() {
-  // rien à faire pour l’instant (menu déjà codé en HTML)
-}
-
+// ---------- Filtres ----------
 function updateCategoryFilter() {
   const media = document.getElementById("mediaFilter").value;
   const categories = new Set();
@@ -177,7 +155,7 @@ function filterAndDisplay() {
   displayArticles(filtered);
 }
 
-// --------- Affichage ---------
+// ---------- Affichage ----------
 function displayArticles(articles) {
   const container = document.getElementById("articles-container");
   container.innerHTML = "";
@@ -202,7 +180,7 @@ function displayArticles(articles) {
   });
 }
 
-// --------- Chargement principal (UNE SEULE FOIS) ---------
+// ---------- Chargement principal ----------
 async function loadArticles() {
   const [snapImago, snapRTL] = await Promise.all([
     getDocs(collection(dbImago, "articles")),
@@ -225,14 +203,13 @@ async function loadArticles() {
     allArticles.push(data);
   });
 
-  // Tri par date décroissante
+  // Tri décroissant par date
   allArticles.sort((a, b) => toDateSafe(b) - toDateSafe(a));
 
-  populateMediaFilter();
   updateCategoryFilter();
   displayArticles(allArticles);
 
-  // Filtres (une seule fois)
+  // Listeners filtres
   document.getElementById("mediaFilter").addEventListener("change", () => {
     updateCategoryFilter();
     filterAndDisplay();
@@ -243,17 +220,17 @@ async function loadArticles() {
   await setLastArticleLink();
 }
 
-// --------- Dropdown header ---------
+// ---------- Dropdown header ----------
 const toggleButton = document.getElementById("dropdownToggle");
 const dropdownMenu = document.getElementById("dropdownMenu");
 if (toggleButton && dropdownMenu) {
   toggleButton.addEventListener("click", (e) => {
     e.stopPropagation();
-    dropdownMenu.style.display = (dropdownMenu.style.display === "block") ? "none" : "block";
+    dropdownMenu.style.display = dropdownMenu.style.display === "block" ? "none" : "block";
   });
-  window.addEventListener("click", () => (dropdownMenu.style.display = "none"));
+  window.addEventListener("click", () => { dropdownMenu.style.display = "none"; });
   dropdownMenu.addEventListener("click", (e) => e.stopPropagation());
 }
 
-// Démarrage
+// Démarre une fois le DOM prêt
 window.addEventListener("DOMContentLoaded", loadArticles);
