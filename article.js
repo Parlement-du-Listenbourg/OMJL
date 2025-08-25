@@ -50,17 +50,33 @@ if (toggleButton && dropdownMenu) {
   });
 }
 
-//async function setLastArticleLink() {
-  //const db = media === "imago" ? dbImago : dbRTL;
-  //const articlesRef = collection(db, 'articles');
-  //const q = query(articlesRef, orderBy('realTimestamp', 'desc'), limit(1));
-  //const snapshot = await getDocs(q);
-  //if (!snapshot.empty) {
-    //const docSnap = snapshot.docs[0];
-    //const link = document.getElementById('lastArticleLink');
-    //link.href = `article.html?id=${docSnap.id}&media=${media}`;
-  //}
-//}
+// === Emoji via images hébergées sur GitHub Pages ===
+const EMOJI_MAP = {
+  ":lieu:"  : "https://parlement-du-listenbourg.github.io/OMJL/emojis/lieu.png",
+  ":source:": "https://parlement-du-listenbourg.github.io/OMJL/emojis/source.png",
+  ":logo:"  : "https://parlement-du-listenbourg.github.io/OMJL/emojis/logo.png"
+};
+
+showdown.extension('customEmoji', function () {
+  return [{
+    type: 'lang',
+    regex: /:(lieu|source|logo):/g,
+    replace: (match, key) => {
+      const url = EMOJI_MAP[":" + key + ":"];
+      return url
+        ? `<img class="emoji" src="${url}" alt="${match}" loading="lazy">`
+        : match;
+    }
+  }];
+});
+
+const converter = new showdown.Converter({
+  simplifiedAutoLink: true,
+  strikethrough: true,
+  tables: true,
+  extensions: ['customEmoji']  // <== seulement customEmoji
+});
+
 setLastArticleLink();
 
 function getSourceFullName(media) {

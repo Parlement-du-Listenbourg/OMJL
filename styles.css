@@ -285,3 +285,11 @@ small {
 .header-select select:hover {
     background-color: #444;
 }
+/* Affichage "emoji" discret et aligné avec le texte */
+.emoji {
+  width: 20px;
+  height: 20px;
+  vertical-align: text-bottom; /* ou middle selon ton rendu préféré */
+  margin: 0 2px;
+  image-rendering: auto;
+}

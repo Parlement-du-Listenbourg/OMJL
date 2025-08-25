@@ -50,6 +50,34 @@ const converter = new showdown.Converter({
   extensions: ["smallText"],
 });
 
+// === Emoji via images hébergées sur GitHub Pages ===
+const EMOJI_MAP = {
+  ":lieu:"  : "https://parlement-du-listenbourg.github.io/OMJL/emojis/lieu.png",
+  ":source:": "https://parlement-du-listenbourg.github.io/OMJL/emojis/source.png",
+  ":logo:"  : "https://parlement-du-listenbourg.github.io/OMJL/emojis/logo.png"
+};
+
+showdown.extension('customEmoji', function () {
+  return [{
+    type: 'lang',
+    regex: /:(lieu|source|logo):/g,
+    replace: (match, key) => {
+      const url = EMOJI_MAP[":" + key + ":"];
+      return url
+        ? `<img class="emoji" src="${url}" alt="${match}" loading="lazy">`
+        : match;
+    }
+  }];
+});
+
+// IMPORTANT : ajoute 'customEmoji' dans la liste des extensions du converter
+const converter = new showdown.Converter({
+  simplifiedAutoLink: true,
+  strikethrough: true,
+  tables: true,
+  extensions: ['smallText', 'customEmoji']
+});
+
 // --------- Helpers ---------
 function getFullSourceName(key) {
   return key === "imago" ? "Imago Veritatis"
