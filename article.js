@@ -53,7 +53,7 @@ const EMOJI_BASE = "https://tris-250.github.io/RTL-World/emojis";
 const EMOJI_MAP = {
   ":lieu:"  : `${EMOJI_BASE}/lieu.png`,
   ":source:": `${EMOJI_BASE}/source.png`,
-  ":logo:"  : "https://tris-250.github.io/RTL-World/logo.png" // ou `${EMOJI_BASE}/logo.png` si déplacé
+  ":logo:"  : `${EMOJI_BASE}/logo.png`,
 };
 
 function injectCustomEmoji(html) {
