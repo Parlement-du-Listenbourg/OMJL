@@ -286,10 +286,10 @@ small {
     background-color: #444;
 }
 /* Affichage "emoji" discret et aligné avec le texte */
-.emoji {
+/*.emoji {
   width: 20px;
   height: 20px;
   vertical-align: text-bottom; /* ou middle selon ton rendu préféré */
-  margin: 0 2px;
+ /* margin: 0 2px;
   image-rendering: auto;
 }

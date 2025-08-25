@@ -52,9 +52,9 @@ if (toggleButton && dropdownMenu) {
 
 // === Emoji via images hébergées sur GitHub Pages ===
 const EMOJI_MAP = {
-  ":lieu:"  : "https://parlement-du-listenbourg.github.io/OMJL/emojis/lieu.png",
-  ":source:": "https://parlement-du-listenbourg.github.io/OMJL/emojis/source.png",
-  ":logo:"  : "https://parlement-du-listenbourg.github.io/OMJL/emojis/logo.png"
+    ":lieu:"  : "https://tris-250.github.io/RTL-World/emojis/lieu.png",
+    ":source:": "https://tris-250.github.io/RTL-World/emojis/source.png",
+    ":logo:"  : "https://tris-250.github.io/RTL-World/emojis/logo.png"
 };
 
 showdown.extension('customEmoji', function () {
