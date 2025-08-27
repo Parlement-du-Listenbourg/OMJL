@@ -293,3 +293,77 @@ small {
  /* margin: 0 2px;
   image-rendering: auto;
 }
+
+/* === Emplacements du header (desktop & mobile) === */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Bloc unique de filtres que le JS déplace */
+#filters {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Quand le bloc est dans le header (desktop) */
+.filters-inline--header select {
+  background-color: #333;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  border-radius: 5px;
+  height: 36px;
+  appearance: none;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+/* Quand le bloc est dans le menu + (mobile) */
+.filters-inline--dropdown {
+  display: block;
+  padding: 8px 12px;
+}
+.filters-inline--dropdown select {
+  width: 100%;
+  margin: 6px 0;
+  background-color: #333;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  padding: 8px 12px;
+  font-size: 0.95rem;
+  border-radius: 5px;
+  height: 38px;
+  appearance: none;
+  cursor: pointer;
+}
+
+/* Optionnel : on masque le slot header sous 768px
+   (le JS déplace déjà le bloc mais ça évite les sauts de mise en page) */
+@media (max-width: 768px) {
+  .filters-inline--header { display: none; }
+}
+
+/* Petit confort pour le menu déroulant */
+.dropdown-content {
+  min-width: 220px;         /* un peu plus large pour contenir les selects */
+  padding: 8px 0;
+}
+
+/* === FIX : commentaire .emoji mal fermé plus haut ===
+   -> soit tu retires entièrement le commentaire cassé,
+   -> soit tu utilises la version propre ci-dessous : */
+
+/* Affichage "emoji" discret et aligné avec le texte */
+/*
+.emoji {
+  width: 20px;
+  height: 20px;
+  vertical-align: text-bottom;  /* ou 'middle' si tu préfères * /
+  margin: 0 2px;
+  image-rendering: auto;
+}
+*/
