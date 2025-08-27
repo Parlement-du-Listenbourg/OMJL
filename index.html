@@ -23,20 +23,10 @@
     <img src="logo.png" alt="Logo du journal" class="logo" />
     <span class="page-title">Page d'accueil</span>
 
-          <div class="header-select">
-        <select id="mediaFilter" aria-label="Filtrer par média">
-          <option value="all">Tous les médias</option>
-          <option value="imago">Imago Veritatis</option>
-          <option value="rtl">RTL World</option>
-        </select>
-
-        <select id="categoryFilter" aria-label="Filtrer par catégorie">
-          <option value="all">Toutes les catégories</option>
-        </select>
-      </div>
-    </div>
-
     <div class="header-actions">
+      <!-- Emplacement DESKTOP pour les filtres -->
+      <div id="filtersHeaderSlot"></div>
+
       <!-- Bouton + avec menu -->
       <div class="dropdown">
         <button id="dropdownToggle" class="header-button" aria-haspopup="true" aria-expanded="false">+</button>
@@ -44,13 +34,64 @@
           <a href="https://discord.gg/UJDYnnFdcK" role="menuitem">Discord Média du Listenbourg</a>
           <a href="https://discord.gg/rZervsXnWs" role="menuitem">Discord OMJL</a>
           <hr class="dropdown-separator" />
+
+          <!-- Emplacement MOBILE pour les filtres (dans le menu +) -->
+          <div id="dropdownFiltersAnchor"></div>
+
+          <hr class="dropdown-separator" />
           <a id="lastArticleLink" href="#" role="menuitem">Dernier article</a>
         </div>
       </div>
-
+    </div>
   </header>
 
+  <!-- Bloc de filtres (UN SEUL) : on le déplace entre header et menu + en JS -->
+  <div id="filters" class="filters-inline filters-inline--header" aria-label="Filtres">
+    <select id="mediaFilter" aria-label="Filtrer par média">
+      <option value="all">Tous les médias</option>
+      <option value="imago">Imago Veritatis</option>
+      <option value="rtl">RTL World</option>
+    </select>
+
+    <select id="categoryFilter" aria-label="Filtrer par catégorie">
+      <option value="all">Toutes les catégories</option>
+    </select>
+  </div>
+
   <div id="articles-container"></div>
+
+  <!-- Script ultra-léger qui déplace #filters selon la largeur -->
+  <script>
+    (function () {
+      const filtersEl = document.getElementById('filters');
+      const headerSlot = document.getElementById('filtersHeaderSlot');
+      const dropdownSlot = document.getElementById('dropdownFiltersAnchor');
+      const mq = window.matchMedia('(max-width: 768px)');
+
+      function relocate(e) {
+        if (!filtersEl || !headerSlot || !dropdownSlot) return;
+        if (e.matches) {
+          // MOBILE -> dans le menu +
+          if (filtersEl.parentNode !== dropdownSlot) {
+            dropdownSlot.appendChild(filtersEl);
+            filtersEl.classList.remove('filters-inline--header');
+            filtersEl.classList.add('filters-inline--dropdown');
+          }
+        } else {
+          // DESKTOP -> dans le header
+          if (filtersEl.parentNode !== headerSlot) {
+            headerSlot.appendChild(filtersEl);
+            filtersEl.classList.remove('filters-inline--dropdown');
+            filtersEl.classList.add('filters-inline--header');
+          }
+        }
+      }
+
+      relocate(mq);
+      if (mq.addEventListener) mq.addEventListener('change', relocate);
+      else mq.addListener(relocate); // vieux navigateurs
+    })();
+  </script>
 
   <script type="module" src="articles.js"></script>
 </body>
