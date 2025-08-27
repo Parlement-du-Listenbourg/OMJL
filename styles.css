@@ -367,3 +367,31 @@ small {
   image-rendering: auto;
 }
 */
+
+/* === Style des sélecteurs (journal + catégories) === */
+.header-select select {
+  background-color: #333;
+  color: #66aaff;
+  border: 1px solid #444;
+  padding: 8px 14px;
+  font-size: 0.95rem;
+  font-weight: bold;
+  border-radius: 6px;
+  font-family: inherit;
+  height: 38px;
+  appearance: none;   /* masque la flèche native */
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 140px;   /* largeur mini confortable */
+}
+
+.header-select select:hover {
+  background-color: #444;
+  border-color: #555;
+}
+
+.header-select {
+  display: flex;
+  gap: 10px;  /* espace entre les deux select */
+  align-items: center;
+}
